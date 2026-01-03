@@ -93,6 +93,8 @@ function Map({ children, styles, ...props }: MapProps) {
       attributionControl: {
         compact: true,
       },
+      touchZoomRotate: true,
+      touchPitch: true,
       ...props,
     });
 
@@ -298,7 +300,10 @@ function MarkerContent({ children, className }: MarkerContentProps) {
   if (!isReady || !markerElementRef.current) return null;
 
   return createPortal(
-    <div className={cn("relative cursor-pointer", className)}>
+    <div 
+      className={cn("relative cursor-pointer touch-manipulation", className)}
+      style={{ touchAction: "manipulation" }}
+    >
       {children || <DefaultMarkerIcon />}
     </div>,
     markerElementRef.current
@@ -411,7 +416,9 @@ function MarkerTooltip({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const popupRef = useRef<MapLibreGL.Popup | null>(null);
   const [mounted, setMounted] = useState(false);
+  const isOpenRef = useRef(false);
   const popupOptionsRef = useRef(popupOptions);
+  const touchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!isReady || !markerRef.current || !markerElementRef.current || !map)
@@ -435,21 +442,83 @@ function MarkerTooltip({
     const marker = markerRef.current;
 
     const handleMouseEnter = () => {
-      popup.setLngLat(marker.getLngLat()).addTo(map);
+      if (!isOpenRef.current) {
+        popup.setLngLat(marker.getLngLat()).addTo(map);
+        isOpenRef.current = true;
+      }
     };
-    const handleMouseLeave = () => popup.remove();
+    const handleMouseLeave = () => {
+      if (isOpenRef.current) {
+        popup.remove();
+        isOpenRef.current = false;
+      }
+    };
+
+    // Touch event handlers for mobile
+    const handleTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Clear any existing timeout
+      if (touchTimeoutRef.current) {
+        clearTimeout(touchTimeoutRef.current);
+      }
+      
+      // Toggle popup on touch
+      if (isOpenRef.current) {
+        popup.remove();
+        isOpenRef.current = false;
+      } else {
+        popup.setLngLat(marker.getLngLat()).addTo(map);
+        isOpenRef.current = true;
+      }
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      // For touch devices that also fire click events
+      if (window.matchMedia("(pointer: coarse)").matches) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isOpenRef.current) {
+          popup.remove();
+          isOpenRef.current = false;
+        } else {
+          popup.setLngLat(marker.getLngLat()).addTo(map);
+          isOpenRef.current = true;
+        }
+      }
+    };
 
     markerElement.addEventListener("mouseenter", handleMouseEnter);
     markerElement.addEventListener("mouseleave", handleMouseLeave);
+    markerElement.addEventListener("touchstart", handleTouchStart, { passive: false });
+    markerElement.addEventListener("click", handleClick);
+    
+    // Close popup when clicking on the map
+    const handleMapClick = () => {
+      if (isOpenRef.current) {
+        popup.remove();
+        isOpenRef.current = false;
+      }
+    };
+    map.on("click", handleMapClick);
+    
     setMounted(true);
 
     return () => {
       markerElement.removeEventListener("mouseenter", handleMouseEnter);
       markerElement.removeEventListener("mouseleave", handleMouseLeave);
+      markerElement.removeEventListener("touchstart", handleTouchStart);
+      markerElement.removeEventListener("click", handleClick);
+      map.off("click", handleMapClick);
+      if (touchTimeoutRef.current) {
+        clearTimeout(touchTimeoutRef.current);
+      }
       popup.remove();
       popupRef.current = null;
       containerRef.current = null;
       setMounted(false);
+      isOpenRef.current = false;
     };
   }, [isReady, map]);
 
@@ -531,7 +600,7 @@ const positionClasses = {
 
 function ControlGroup({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col rounded-md border border-border bg-background shadow-sm overflow-hidden [&>button:not(:last-child)]:border-b [&>button:not(:last-child)]:border-border">
+    <div className="flex flex-col rounded-md border border-border bg-background shadow-lg overflow-hidden [&>button:not(:last-child)]:border-b [&>button:not(:last-child)]:border-border">
       {children}
     </div>
   );
@@ -554,10 +623,11 @@ function ControlButton({
       aria-label={label}
       type="button"
       className={cn(
-        "flex items-center justify-center size-8 hover:bg-accent dark:hover:bg-accent/40 transition-colors",
+        "flex items-center justify-center size-10 sm:size-8 hover:bg-accent dark:hover:bg-accent/40 active:bg-accent/60 transition-colors touch-manipulation",
         disabled && "opacity-50 pointer-events-none cursor-not-allowed"
       )}
       disabled={disabled}
+      style={{ touchAction: "manipulation" }}
     >
       {children}
     </button>
