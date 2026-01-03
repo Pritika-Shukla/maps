@@ -13,16 +13,6 @@ const colorMap: Record<string, string> = {
   indigo: "bg-indigo-500",
 };
 
-const colorTextMap: Record<string, string> = {
-  black: "text-black",
-  green: "text-green-500",
-  purple: "text-purple-500",
-  blue: "text-blue-500",
-  red: "text-red-500",
-  orange: "text-orange-500",
-  indigo: "text-indigo-500",
-};
-
 export default function Page() {
   const companyNames = companiesData.map((c) => c.company).join(", ");
   
@@ -43,7 +33,6 @@ export default function Page() {
       >
         {companiesData.map((companyData) => {
           const colorClass = colorMap[companyData.color] || "bg-gray-500";
-          const textColorClass = colorTextMap[companyData.color] || "text-gray-500";
           
           return companyData.offices.map((office, index) => (
             <MapMarker 
@@ -52,28 +41,29 @@ export default function Page() {
               latitude={office.lat}
             >
               <MarkerContent>
-                <div className="relative flex items-center justify-center">
-                  <div className={`absolute size-12 rounded-full ${colorClass}/20`} />
-                  <div className={`absolute size-9 rounded-full ${colorClass}/30 animate-ping`} style={{ animationDuration: "2s" }} />
-                  <div className={`relative size-10 rounded-full bg-white border-2 ${colorClass} shadow-lg ${colorClass}/50 flex items-center justify-center p-1`}>
-                    {companyData.logo ? (
-                      <img 
-                        src={companyData.logo} 
-                        alt={companyData.company} 
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <div className={`w-full h-full rounded-full ${colorClass} flex items-center justify-center text-white text-xs font-bold`}>
-                        {companyData.company.charAt(0)}
-                      </div>
-                    )}
-                  </div>
+                <div className="rounded-full bg-white flex items-center justify-center p-1">
+                  {companyData.logo ? (
+                    <img 
+                      src={companyData.logo} 
+                      alt={companyData.company} 
+                      className="w-4 h-4 object-contain"
+                    />
+                  ) : (
+                    <div className={`w-4 h-4 rounded-full ${colorClass} flex items-center justify-center text-white text-[9px] font-bold`}>
+                      {companyData.company.charAt(0)}
+                    </div>
+                  )}
                 </div>
               </MarkerContent>
-              <MarkerTooltip>
-                <div className="text-center">
-                  <div className={`font-medium ${textColorClass}`}>{office.name}</div>
-                  <div className="text-xs text-muted-foreground">{office.city}</div>
+              <MarkerTooltip className="bg-gray-900/95 backdrop-blur-sm shadow-md px-2 py-1 rounded-md text-xs border border-gray-800 min-w-[100px]">
+                <div className="text-center space-y-0.5">
+                  <div className="font-semibold text-sm text-gray-200 ">
+                    {companyData.company}
+                  </div>
+                  
+                  <div className="text-[11px] text-gray-200 ">
+                    {office.city}
+                  </div>
                 </div>
               </MarkerTooltip>
             </MapMarker>
