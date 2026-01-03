@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { MapMarker, MarkerContent, MarkerTooltip, Map } from "./map";
 import { companiesData } from "@/lib/offices";
 
@@ -13,8 +14,78 @@ const colorMap: Record<string, string> = {
   indigo: "bg-indigo-500",
 };
 
+// Function to calculate offset for markers at the same location
+// Returns offset in degrees (small offset to spread markers)
+function calculateOffset(index: number, total: number): { lngOffset: number; latOffset: number } {
+  if (total <= 1) return { lngOffset: 0, latOffset: 0 };
+  
+  // Use a circular pattern to spread markers
+  const radius = 0.002; // Small radius in degrees (~200m at equator)
+  const angle = (2 * Math.PI * index) / total;
+  
+  return {
+    lngOffset: radius * Math.cos(angle),
+    latOffset: radius * Math.sin(angle),
+  };
+}
+
 export default function Page() {
   const companyNames = companiesData.map((c) => c.company).join(", ");
+  
+  // Group offices by location and calculate offsets
+  type MarkerItem = {
+    companyData: typeof companiesData[0];
+    office: typeof companiesData[0]['offices'][0];
+    index: number;
+  };
+  
+  type MarkerWithOffset = {
+    companyData: typeof companiesData[0];
+    office: typeof companiesData[0]['offices'][0];
+    officeIndex: number;
+    lng: number;
+    lat: number;
+  };
+  
+  const markersWithOffsets = useMemo(() => {
+    // Create a map of location -> array of markers
+    const locationMap: Record<string, MarkerItem[]> = {};
+    
+    companiesData.forEach((companyData) => {
+      companyData.offices.forEach((office, officeIndex) => {
+        // Round coordinates to 4 decimal places (~11m precision) to group nearby locations
+        const locationKey = `${office.lng.toFixed(4)},${office.lat.toFixed(4)}`;
+        
+        if (!locationMap[locationKey]) {
+          locationMap[locationKey] = [];
+        }
+        
+        locationMap[locationKey].push({
+          companyData,
+          office,
+          index: officeIndex,
+        });
+      });
+    });
+    
+    // Calculate offsets for each location group
+    const markers: MarkerWithOffset[] = [];
+    
+    Object.values(locationMap).forEach((markerGroup: MarkerItem[]) => {
+      markerGroup.forEach((item: MarkerItem, groupIndex: number) => {
+        const offset = calculateOffset(groupIndex, markerGroup.length);
+        markers.push({
+          companyData: item.companyData,
+          office: item.office,
+          officeIndex: item.index,
+          lng: item.office.lng + offset.lngOffset,
+          lat: item.office.lat + offset.latOffset,
+        });
+      });
+    });
+    
+    return markers;
+  }, []);
   
   return (
     <div className="fixed inset-0 w-full h-full" style={{ touchAction: "pan-x pan-y" }}>
@@ -31,26 +102,26 @@ export default function Page() {
           light: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
         }}
       >
-        {companiesData.map((companyData) => {
-          const colorClass = colorMap[companyData.color] || "bg-gray-500";
+        {markersWithOffsets.map((marker, index) => {
+          const colorClass = colorMap[marker.companyData.color] || "bg-gray-500";
           
-          return companyData.offices.map((office, index) => (
+          return (
             <MapMarker 
-              key={`${companyData.company}-${office.city}-${index}`} 
-              longitude={office.lng} 
-              latitude={office.lat}
+              key={`${marker.companyData.company}-${marker.office.city}-${marker.officeIndex}-${index}`} 
+              longitude={marker.lng} 
+              latitude={marker.lat}
             >
               <MarkerContent>
                 <div className="rounded-full bg-white flex items-center justify-center p-1.5 sm:p-1">
-                  {companyData.logo ? (
+                  {marker.companyData.logo ? (
                     <img 
-                      src={companyData.logo} 
-                      alt={companyData.company} 
+                      src={marker.companyData.logo} 
+                      alt={marker.companyData.company} 
                       className="w-5 h-5 sm:w-4 sm:h-4 object-contain"
                     />
                   ) : (
                     <div className={`w-5 h-5 sm:w-4 sm:h-4 rounded-full ${colorClass} flex items-center justify-center text-white text-[10px] sm:text-[9px] font-bold`}>
-                      {companyData.company.charAt(0)}
+                      {marker.companyData.company.charAt(0)}
                     </div>
                   )}
                 </div>
@@ -58,16 +129,16 @@ export default function Page() {
               <MarkerTooltip className="bg-gray-900/95 backdrop-blur-sm shadow-md px-3 py-2 sm:px-2 sm:py-1 rounded-md text-sm sm:text-xs border border-gray-800 min-w-[120px] sm:min-w-[100px]">
                 <div className="text-center space-y-0.5">
                   <div className="font-semibold text-base sm:text-sm text-gray-200">
-                    {companyData.company}
+                    {marker.companyData.company}
                   </div>
                   
                   <div className="text-xs sm:text-[11px] text-gray-200">
-                    {office.city}
+                    {marker.office.city}
                   </div>
                 </div>
               </MarkerTooltip>
             </MapMarker>
-          ));
+          );
         })}
       </Map>
     </div>
